@@ -9,12 +9,10 @@ from strategy import calculate_consensus
 # --- HELPER FUNCTIONS ---
 
 def get_market_data_for_city(query):
-    """Core logic to find a market, fetch weather, and calculate edge."""
+    """Core engine to find a market, fetch weather, and calculate edge."""
     url = f"https://gamma-api.polymarket.com/events?active=true&query={query}"
     try:
         response = requests.get(url).json()
-        
-        # Check if response is a list and has items
         if not isinstance(response, list) or len(response) == 0:
             return f"❌ No active market found for '{query}'."
         
@@ -85,31 +83,26 @@ def handle_commands():
 # --- BACKGROUND SCAN ---
 
 def background_scan():
-    """Scans for all active temperature markets automatically."""
+    """Scans for all active temperature markets and alerts automatically."""
     while True:
         print("🔄 Running background scan...")
-        # Query specifically for temperature-related events
         url = "https://gamma-api.polymarket.com/events?active=true&closed=false&query=Temperature"
         try:
             resp = requests.get(url).json()
             if isinstance(resp, list):
                 for event in resp:
                     title = event.get('title', '')
-                    # CRITICAL FILTER: Only process if it's a daily temperature market
-                    if "Temperature" in title or "High" in title:
+                    # STRICT FILTER: Only process if "Temperature" or "High" is in the title
+                    if any(word in title for word in ["Temperature", "High", "Low"]):
                         print(f"✅ Processing Temperature Market: {title}")
-                        
-                        # Use the ticker (e.g., NYC-TEMP) to get data
                         ticker = event.get('ticker', '')
                         if ticker:
                             res = get_market_data_for_city(ticker)
-                            # Only send to Telegram if it's an actual analysis (not an error)
+                            # Only alert if it's a valid analysis
                             if "🔍 ANALYSIS" in res:
-                                base_url = f"https://api.telegram.org/bot{config.TELEGRAM_BOT_TOKEN}"
-                                requests.post(f"{base_url}/sendMessage", 
+                                requests.post(f"https://api.telegram.org/bot{config.TELEGRAM_BOT_TOKEN}/sendMessage", 
                                               data={"chat_id": config.TELEGRAM_CHAT_ID, "text": res, "parse_mode": "Markdown"})
                     else:
-                        # Skip unrelated events like GTA VI or Taylor Swift
                         continue
             else:
                 print("Polymarket API returned unexpected format.")
