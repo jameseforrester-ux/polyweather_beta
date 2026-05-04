@@ -1,6 +1,22 @@
 """Calculates confidence and suggests trade actions."""
 import config
 
+def to_celsius(f): 
+    """Converts Fahrenheit to Celsius for international markets[cite: 10]."""
+    return (f - 32) * 5/9
+
+def to_fahrenheit(c): 
+    """Converts Celsius to Fahrenheit for US markets[cite: 10]."""
+    return (c * 9/5) + 32
+
+def format_temp(temp, unit="F"):
+    """Ensures the alert matches the market's specific unit[cite: 8]."""
+    if unit.upper() == "C":
+        return f"{temp:.1f}°C"
+    return f"{temp:.1f}°F"
+
+import config
+
 def calculate_consensus(model_outputs: dict) -> float:
     """Calculates weighted confidence score[cite: 6]."""
     score = 0.0
