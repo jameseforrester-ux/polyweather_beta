@@ -92,35 +92,45 @@ def handle_commands():
 # --- BACKGROUND SCAN ---
 
 def background_scan():
-    """Scans for active temperature markets using slug patterns."""
+    """Scans for active temperature markets using the confirmed slug pattern."""
     while True:
-        print("🔄 Running background scan...")
-        # Use a broader query to ensure we catch markets, then filter manually
-        url = "https://gamma-api.polymarket.com/events?active=true&query=Temperature"
+        print("🔄 Running surgical background scan...")
+        # Broad query to catch all potential matches
+        url = "https://gamma-api.polymarket.com/events?active=true&closed=false&query=temperature"
         try:
             resp = requests.get(url).json()
             if isinstance(resp, list):
                 for event in resp:
-                    title = event.get('title', '')
-                    slug = event.get('slug', '')
+                    slug = event.get('slug', '').lower()
+                    title = event.get('title', '').lower()
                     
-                    # Target only the specific high-temperature patterns
-                    if "temperature" in slug or "highest-temperature" in title.lower():
-                        print(f"✅ Found Market: {title}")
+                    # Target the slug pattern from your embed: 'highest-temperature-in-...'
+                    if "highest-temperature" in slug or "highest-temperature" in title:
+                        print(f"✅ Target Market Identified: {event.get('title')}")
+                        
+                        # Use the ticker (e.g. CHI-TEMP) for the edge analysis
                         ticker = event.get('ticker', '')
                         if ticker:
                             res = get_market_data_for_city(ticker)
+                            
+                            # Only send Telegram alert if we found a tradeable edge
                             if "🔍 ANALYSIS" in res:
-                                requests.post(f"https://api.telegram.org/bot{config.TELEGRAM_BOT_TOKEN}/sendMessage", 
-                                              data={"chat_id": config.TELEGRAM_CHAT_ID, "text": res, "parse_mode": "Markdown"})
+                                bot_url = f"https://api.telegram.org/bot{config.TELEGRAM_BOT_TOKEN}/sendMessage"
+                                requests.post(bot_url, data={
+                                    "chat_id": config.TELEGRAM_CHAT_ID, 
+                                    "text": res, 
+                                    "parse_mode": "Markdown"
+                                })
+                    else:
+                        # Silently skip junk like elections or GTA VI
+                        continue
             else:
-                print("API error: Response is not a list.")
+                print("Polymarket API returned an unexpected object.")
         except Exception as e:
             print(f"Background error: {e}")
             
         print("💤 Scan complete. Waiting 15 minutes...")
         time.sleep(900)
-
 if __name__ == "__main__":
     threading.Thread(target=handle_commands, daemon=True).start()
     background_scan()
