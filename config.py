@@ -11,11 +11,10 @@ TELEGRAM_CHAT_ID = 8748661170
 
 # Updated Weights including HRRR[cite: 6, 9]
 # HRRR is weighted highest for <18 hour lookaheads
+# Updated Weights for 2026 Strategy[cite: 6, 9]
 WEIGHTS = {
-    "HRRR": 0.45,       # High-res rapid refresh (US Only)
-    "ECMWF": 0.25,      # Euro Global
-    "GFS": 0.20,        # US Global
-    "GRAPHCAST": 0.10   # AI model
+    "HRRR": 0.45,       # High-res rapid refresh (Best for <18 hours)
+    "ECMWF": 0.25,      # European Model
+    "GFS": 0.20,        # American Model
+    "GRAPHCAST": 0.10   # AI Model consensus
 }
-
-MIN_CONFIDENCE = 0.65
