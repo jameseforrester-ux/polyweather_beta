@@ -18,7 +18,7 @@ def format_temp(temp, unit="F"):
 import config
 
 def calculate_consensus(model_outputs: dict) -> float:
-    """Calculates weighted confidence score[cite: 6]."""
+    """Weighted sum of HRRR, ECMWF, GFS, and GraphCast[cite: 6, 9]."""
     score = 0.0
     for model, prob in model_outputs.items():
         score += prob * config.WEIGHTS.get(model, 0)
