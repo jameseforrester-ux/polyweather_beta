@@ -92,28 +92,28 @@ def handle_commands():
 # --- BACKGROUND SCAN ---
 
 def background_scan():
-    """Scans for active temperature markets using the confirmed slug pattern."""
+    """Scans all active Polymarket events and filters specifically for temperature slugs."""
     while True:
-        print("🔄 Running surgical background scan...")
-        # Broad query to catch all potential matches
-        url = "https://gamma-api.polymarket.com/events?active=true&closed=false&query=temperature"
+        print("🔄 Running Net-Catcher background scan...")
+        # Get ALL active events (no query) to ensure nothing is missed
+        url = "https://gamma-api.polymarket.com/events?active=true&closed=false&limit=100"
         try:
             resp = requests.get(url).json()
             if isinstance(resp, list):
+                found_any = False
                 for event in resp:
                     slug = event.get('slug', '').lower()
                     title = event.get('title', '').lower()
                     
-                    # Target the slug pattern from your embed: 'highest-temperature-in-...'
-                    if "highest-temperature" in slug or "highest-temperature" in title:
-                        print(f"✅ Target Market Identified: {event.get('title')}")
+                    # Look for the 'highest-temperature' or 'temperature' pattern anywhere in the slug or title
+                    if "temperature" in slug or "temperature" in title:
+                        print(f"✅ Target Market Found: {event.get('title')}")
+                        found_any = True
                         
-                        # Use the ticker (e.g. CHI-TEMP) for the edge analysis
                         ticker = event.get('ticker', '')
                         if ticker:
                             res = get_market_data_for_city(ticker)
-                            
-                            # Only send Telegram alert if we found a tradeable edge
+                            # Only alert if analysis is successful
                             if "🔍 ANALYSIS" in res:
                                 bot_url = f"https://api.telegram.org/bot{config.TELEGRAM_BOT_TOKEN}/sendMessage"
                                 requests.post(bot_url, data={
@@ -121,11 +121,10 @@ def background_scan():
                                     "text": res, 
                                     "parse_mode": "Markdown"
                                 })
-                    else:
-                        # Silently skip junk like elections or GTA VI
-                        continue
+                if not found_any:
+                    print("⚠️ No temperature markets found in the current active list.")
             else:
-                print("Polymarket API returned an unexpected object.")
+                print("Polymarket API returned an unexpected format.")
         except Exception as e:
             print(f"Background error: {e}")
             
