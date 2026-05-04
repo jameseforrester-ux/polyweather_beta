@@ -1,4 +1,7 @@
 # Example of how to call the new message function
+from messages import format_alert
+from strategy import calculate_consensus, format_temp
+
 formatted_msg = format_alert(
     city_name="New York",
     signal="🟢 STRONG BUY",
