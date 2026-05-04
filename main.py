@@ -83,35 +83,35 @@ def handle_commands():
 # --- BACKGROUND SCAN ---
 
 def background_scan():
-    """Scans for all active temperature markets and alerts automatically."""
+    """Scans Polymarket specifically for temperature slugs."""
     while True:
-        print("🔄 Running background scan...")
-        url = "https://gamma-api.polymarket.com/events?active=true&closed=false&query=Temperature"
+        print("🔄 Running background scan for temperature slugs...")
+        # Searching specifically for "highest-temperature" ensures we ignore news/politics
+        url = "https://gamma-api.polymarket.com/events?active=true&closed=false&query=highest-temperature"
         try:
             resp = requests.get(url).json()
             if isinstance(resp, list):
                 for event in resp:
+                    # The slug (e.g., 'highest-temperature-in-chicago...') is the most reliable filter
+                    slug = event.get('slug', '')
                     title = event.get('title', '')
-                    # STRICT FILTER: Only process if "Temperature" or "High" is in the title
-                    if any(word in title for word in ["Temperature", "High", "Low"]):
-                        print(f"✅ Processing Temperature Market: {title}")
+                    
+                    if "highest-temperature" in slug or "highest-temperature" in title.lower():
+                        print(f"✅ Found Temperature Market: {title}")
                         ticker = event.get('ticker', '')
                         if ticker:
                             res = get_market_data_for_city(ticker)
-                            # Only alert if it's a valid analysis
                             if "🔍 ANALYSIS" in res:
                                 requests.post(f"https://api.telegram.org/bot{config.TELEGRAM_BOT_TOKEN}/sendMessage", 
                                               data={"chat_id": config.TELEGRAM_CHAT_ID, "text": res, "parse_mode": "Markdown"})
-                    else:
-                        continue
             else:
-                print("Polymarket API returned unexpected format.")
+                print("Unexpected API response format.")
         except Exception as e:
             print(f"Background error: {e}")
             
         print("💤 Scan complete. Waiting 15 minutes...")
         time.sleep(900)
-
+        
 if __name__ == "__main__":
     threading.Thread(target=handle_commands, daemon=True).start()
     background_scan()
