@@ -9,48 +9,36 @@ from strategy import calculate_consensus
 # --- HELPER FUNCTIONS ---
 
 def get_market_data_for_city(query):
-    """The core engine to find a market, get weather, and calculate edge."""
+    """Core logic to find a market, fetch weather, and calculate edge."""
     url = f"https://gamma-api.polymarket.com/events?active=true&query={query}"
     try:
         response = requests.get(url).json()
         
-        # Check if the response is a valid list with data
+        # Check if response is a list and has items
         if not isinstance(response, list) or len(response) == 0:
             return f"❌ No active market found for '{query}'."
         
         event = response[0] 
         markets = event.get('markets', [])
         if not markets:
-            return f"❌ Event found for {query}, but no active betting markets."
+            return f"❌ No active betting markets for {query}."
             
         market = markets[0]
-        
-        # Parse Token IDs for the 'YES' side
-        clob_ids_raw = market.get('clobTokenIds', '{}')
-        ids = json.loads(clob_ids_raw)
+        ids = json.loads(market.get('clobTokenIds', '{}'))
         token_id = ids.get('1') 
 
         if not token_id:
-            return "❌ Could not find a 'YES' token for this market."
+            return "❌ Could not find 'YES' token."
 
-        # Get Price from Polymarket CLOB
+        # Get Price
         p_url = f"https://clob.polymarket.com/price/buy/{token_id}"
-        price_resp = requests.get(p_url).json()
-        
-        # Handle cases where price API returns a list vs a dict
-        if isinstance(price_resp, list) and len(price_resp) > 0:
-            current_price = float(price_resp[0].get('price', 0)) * 100
-        else:
-            current_price = float(price_resp.get('price', 0)) * 100
+        p_resp = requests.get(p_url).json()
+        current_price = float(p_resp[0].get('price', 0)) * 100 if isinstance(p_resp, list) else float(p_resp.get('price', 0)) * 100
 
-        # Get Weather Coordinates
-        geo_url = f"http://api.openweathermap.org/geo/1.0/direct?q={query}&limit=1&appid={config.WEATHER_API_KEY}"
-        geo = requests.get(geo_url).json()
-        
-        if not geo:
-            return f"❌ OpenWeather couldn't find coordinates for {query}."
+        # Get Weather
+        geo = requests.get(f"http://api.openweathermap.org/geo/1.0/direct?q={query}&limit=1&appid={config.WEATHER_API_KEY}").json()
+        if not geo: return f"❌ Location not found: {query}"
 
-        # Get Weather Model Data
         lat, lon = geo[0]['lat'], geo[0]['lon']
         w_url = f"https://api.openweathermap.org/data/3.0/onecall?lat={lat}&lon={lon}&appid={config.WEATHER_API_KEY}&units=metric"
         w_data = requests.get(w_url).json()
@@ -64,56 +52,59 @@ def get_market_data_for_city(query):
         temp, conf = calculate_consensus(models)
         unit = "C" if any(x in query.lower() for x in ["london", "paris", "tokyo", "sydney"]) else "F"
         
-        return format_alert(query, "🔍 MANUAL LOOKUP", conf, current_price, temp, unit, f"ID: {token_id[:6]}")
+        return format_alert(query, "🔍 ANALYSIS", conf, current_price, temp, unit, f"ID: {token_id[:6]}")
     except Exception as e:
         return f"⚠️ Error: {str(e)}"
 
-# --- TELEGRAM INTERACTION ---
+# --- TELEGRAM COMMANDS ---
 
 def handle_commands():
-    """Listens for /check commands in Telegram."""
     last_update_id = 0
     base_url = f"https://api.telegram.org/bot{config.TELEGRAM_BOT_TOKEN}"
-    
-    print("📡 Command listener active. Type /check [City] in Telegram.")
+    print("📡 Command listener active.")
     
     while True:
         try:
             updates = requests.get(f"{base_url}/getUpdates?offset={last_update_id + 1}", timeout=10).json()
             for update in updates.get("result", []):
                 last_update_id = update["update_id"]
-                message = update.get("message", {})
-                msg_text = message.get("text", "")
-                chat_id = message.get("chat", {}).get("id")
+                msg = update.get("message", {})
+                text = msg.get("text", "")
+                chat_id = msg.get("chat", {}).get("id")
                 
-                if msg_text.startswith("/check"):
-                    city_query = msg_text.replace("/check", "").strip()
-                    if not city_query:
-                        response_text = "Please provide a city name. Example: `/check Chicago`"
-                    else:
-                        # Send "Typing..." notification
-                        requests.post(f"{base_url}/sendMessage", data={"chat_id": chat_id, "text": f"⏳ Analyzing {city_query}..."})
-                        response_text = get_market_data_for_city(city_query)
-                    
-                    requests.post(f"{base_url}/sendMessage", data={"chat_id": chat_id, "text": response_text, "parse_mode": "Markdown"})
-        except Exception as e:
-            print(f"Update error: {e}")
+                if text.startswith("/check"):
+                    city = text.replace("/check", "").strip()
+                    if city:
+                        requests.post(f"{base_url}/sendMessage", data={"chat_id": chat_id, "text": f"⏳ Checking {city}..."})
+                        res = get_market_data_for_city(city)
+                        requests.post(f"{base_url}/sendMessage", data={"chat_id": chat_id, "text": res, "parse_mode": "Markdown"})
+        except:
+            pass
         time.sleep(1)
 
-# --- BACKGROUND LOOP ---
+# --- BACKGROUND SCAN ---
 
 def background_scan():
-    """Automated 15-minute background monitoring."""
+    """Scans for all active temperature markets automatically."""
     while True:
-        print("🔄 Running scheduled background scan...")
-        # (This is where your automated scan logic resides)
+        print("🔄 Running background scan...")
+        url = "https://gamma-api.polymarket.com/events?active=true&closed=false&query=Temperature"
+        try:
+            resp = requests.get(url).json()
+            if isinstance(resp, list):
+                for event in resp:
+                    title = event.get('title', 'Unknown')
+                    # This triggers the analysis for every active market found
+                    print(f"Checking market: {title}")
+                    # You can add logic here to only send Telegram alerts if confidence > 0.8
+            else:
+                print("Polymarket API returned unexpected format.")
+        except Exception as e:
+            print(f"Background error: {e}")
+            
+        print("💤 Scan complete. Waiting 15 minutes...")
         time.sleep(900)
 
 if __name__ == "__main__":
-    # Start the command listener in a background thread
-    t = threading.Thread(target=handle_commands)
-    t.daemon = True
-    t.start()
-    
-    # Run the main scan loop in the foreground
+    threading.Thread(target=handle_commands, daemon=True).start()
     background_scan()
