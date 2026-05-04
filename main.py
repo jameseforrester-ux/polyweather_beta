@@ -88,15 +88,29 @@ def background_scan():
     """Scans for all active temperature markets automatically."""
     while True:
         print("🔄 Running background scan...")
+        # Query specifically for temperature-related events
         url = "https://gamma-api.polymarket.com/events?active=true&closed=false&query=Temperature"
         try:
             resp = requests.get(url).json()
             if isinstance(resp, list):
                 for event in resp:
-                    title = event.get('title', 'Unknown')
-                    # This triggers the analysis for every active market found
-                    print(f"Checking market: {title}")
-                    # You can add logic here to only send Telegram alerts if confidence > 0.8
+                    title = event.get('title', '')
+                    # CRITICAL FILTER: Only process if it's a daily temperature market
+                    if "Temperature" in title or "High" in title:
+                        print(f"✅ Processing Temperature Market: {title}")
+                        
+                        # Use the ticker (e.g., NYC-TEMP) to get data
+                        ticker = event.get('ticker', '')
+                        if ticker:
+                            res = get_market_data_for_city(ticker)
+                            # Only send to Telegram if it's an actual analysis (not an error)
+                            if "🔍 ANALYSIS" in res:
+                                base_url = f"https://api.telegram.org/bot{config.TELEGRAM_BOT_TOKEN}"
+                                requests.post(f"{base_url}/sendMessage", 
+                                              data={"chat_id": config.TELEGRAM_CHAT_ID, "text": res, "parse_mode": "Markdown"})
+                    else:
+                        # Skip unrelated events like GTA VI or Taylor Swift
+                        continue
             else:
                 print("Polymarket API returned unexpected format.")
         except Exception as e:
