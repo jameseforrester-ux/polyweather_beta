@@ -7,12 +7,18 @@ import datetime
 
 # --- CONFIGURATION ---
 # 1. Get your token from @BotFather on Telegram
-TELEGRAM_TOKEN = "YOUR_BOT_TOKEN_HERE"
+TELEGRAM_TOKEN = 8338861744:AAEhvJfvwqcsVTdKX6ZscrXzvT2acfXTH3U
 # 2. Get your ID from @userinfobot on Telegram
-USER_ID = "YOUR_CHAT_ID_HERE"
+USER_ID = 8748661170
 
 # Airport ICAO codes to monitor (Polymarket usually uses major US hubs)
-MONITORED_AIRPORTS = ["KORD", "KJFK", "KLAX", "KDEN", "KATL", "KPHX", "KMIA", "KSFO"]
+MONITORED_AIRPORTS = [
+    "KLGA", "RKSI", "ZSPD", "KATL", "KLAX", "KSEA", "KBKF", "VHHH", 
+    "KHOU", "EGLC", "SAEZ", "NZWN", "RJTT", "WSSS", "KMIA", "LFPB", 
+    "WIHH", "RKPK", "SBGR", "EPWA", "ZGSZ", "KORD", "ZGGG", "ZHHH", 
+    "MPMG", "UUWW", "RPLL", "LLBG", "EFHK", "ZSQD", "FACT", "RCSS", 
+    "LEMD", "ZBAA", "LTAC"
+]
 
 bot = Bot(token=TELEGRAM_TOKEN)
 
