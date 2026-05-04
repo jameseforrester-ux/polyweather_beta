@@ -10,24 +10,50 @@ from strategy import calculate_consensus
 
 def get_market_data_for_city(query):
     """The core engine to find a market, get weather, and calculate edge."""
-    # 1. Find the market
     url = f"https://gamma-api.polymarket.com/events?active=true&query={query}"
     try:
         response = requests.get(url).json()
-        if not response: return "❌ No active market found for that city."
         
-        event = response[0]
-        market = event['markets'][0]
-        ids = json.loads(market.get('clobTokenIds', '{}'))
-        token_id = ids.get('1')
+        # Check if the response is a valid list with data
+        if not isinstance(response, list) or len(response) == 0:
+            return f"❌ No active market found for '{query}'."
+        
+        event = response[0] 
+        markets = event.get('markets', [])
+        if not markets:
+            return f"❌ Event found for {query}, but no active betting markets."
+            
+        market = markets[0]
+        
+        # Parse Token IDs for the 'YES' side
+        clob_ids_raw = market.get('clobTokenIds', '{}')
+        ids = json.loads(clob_ids_raw)
+        token_id = ids.get('1') 
 
-        # 2. Get Price
+        if not token_id:
+            return "❌ Could not find a 'YES' token for this market."
+
+        # Get Price from Polymarket CLOB
         p_url = f"https://clob.polymarket.com/price/buy/{token_id}"
-        price = float(requests.get(p_url).json().get('price', 0)) * 100
+        price_resp = requests.get(p_url).json()
+        
+        # Handle cases where price API returns a list vs a dict
+        if isinstance(price_resp, list) and len(price_resp) > 0:
+            current_price = float(price_resp[0].get('price', 0)) * 100
+        else:
+            current_price = float(price_resp.get('price', 0)) * 100
 
-        # 3. Get Weather (Geocoding + OneCall)
-        geo = requests.get(f"http://api.openweathermap.org/geo/1.0/direct?q={query}&limit=1&appid={config.WEATHER_API_KEY}").json()
-        w_data = requests.get(f"https://api.openweathermap.org/data/3.0/onecall?lat={geo[0]['lat']}&lon={geo[0]['lon']}&appid={config.WEATHER_API_KEY}&units=metric").json()
+        # Get Weather Coordinates
+        geo_url = f"http://api.openweathermap.org/geo/1.0/direct?q={query}&limit=1&appid={config.WEATHER_API_KEY}"
+        geo = requests.get(geo_url).json()
+        
+        if not geo:
+            return f"❌ OpenWeather couldn't find coordinates for {query}."
+
+        # Get Weather Model Data
+        lat, lon = geo[0]['lat'], geo[0]['lon']
+        w_url = f"https://api.openweathermap.org/data/3.0/onecall?lat={lat}&lon={lon}&appid={config.WEATHER_API_KEY}&units=metric"
+        w_data = requests.get(w_url).json()
 
         models = {
             "hrrr": w_data['hourly'][0]['temp'],
@@ -36,9 +62,9 @@ def get_market_data_for_city(query):
         }
         
         temp, conf = calculate_consensus(models)
-        unit = "C" if any(x in query.lower() for x in ["london", "paris", "tokyo"]) else "F"
+        unit = "C" if any(x in query.lower() for x in ["london", "paris", "tokyo", "sydney"]) else "F"
         
-        return format_alert(query, "🔍 MANUAL LOOKUP", conf, price, temp, unit, f"ID: {token_id[:6]}")
+        return format_alert(query, "🔍 MANUAL LOOKUP", conf, current_price, temp, unit, f"ID: {token_id[:6]}")
     except Exception as e:
         return f"⚠️ Error: {str(e)}"
 
@@ -53,34 +79,41 @@ def handle_commands():
     
     while True:
         try:
-            updates = requests.get(f"{base_url}/getUpdates?offset={last_update_id + 1}").json()
+            updates = requests.get(f"{base_url}/getUpdates?offset={last_update_id + 1}", timeout=10).json()
             for update in updates.get("result", []):
                 last_update_id = update["update_id"]
-                msg = update.get("message", {}).get("text", "")
+                message = update.get("message", {})
+                msg_text = message.get("text", "")
+                chat_id = message.get("chat", {}).get("id")
                 
-                if msg.startswith("/check"):
-                    city_query = msg.replace("/check", "").strip()
+                if msg_text.startswith("/check"):
+                    city_query = msg_text.replace("/check", "").strip()
                     if not city_query:
                         response_text = "Please provide a city name. Example: `/check Chicago`"
                     else:
-                        requests.post(f"{base_url}/sendMessage", data={"chat_id": config.TELEGRAM_CHAT_ID, "text": f"⏳ Fetching data for {city_query}..."})
+                        # Send "Typing..." notification
+                        requests.post(f"{base_url}/sendMessage", data={"chat_id": chat_id, "text": f"⏳ Analyzing {city_query}..."})
                         response_text = get_market_data_for_city(city_query)
                     
-                    requests.post(f"{base_url}/sendMessage", data={"chat_id": config.TELEGRAM_CHAT_ID, "text": response_text, "parse_mode": "Markdown"})
-        except:
-            pass
-        time.sleep(2)
+                    requests.post(f"{base_url}/sendMessage", data={"chat_id": chat_id, "text": response_text, "parse_mode": "Markdown"})
+        except Exception as e:
+            print(f"Update error: {e}")
+        time.sleep(1)
 
 # --- BACKGROUND LOOP ---
 
 def background_scan():
-    """Your original 15-minute automated scanner."""
+    """Automated 15-minute background monitoring."""
     while True:
         print("🔄 Running scheduled background scan...")
-        # (The scan logic goes here - similar to the manual lookup but for all active markets)
+        # (This is where your automated scan logic resides)
         time.sleep(900)
 
 if __name__ == "__main__":
-    # Run the command listener in a separate thread so it doesn't block the loop
-    threading.Thread(target=handle_commands, daemon=True).start()
+    # Start the command listener in a background thread
+    t = threading.Thread(target=handle_commands)
+    t.daemon = True
+    t.start()
+    
+    # Run the main scan loop in the foreground
     background_scan()
