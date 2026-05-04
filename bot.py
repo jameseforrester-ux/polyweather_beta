@@ -7,9 +7,9 @@ import datetime
 
 # --- CONFIGURATION ---
 # 1. Get your token from @BotFather on Telegram
-TELEGRAM_TOKEN = 8338861744:AAEhvJfvwqcsVTdKX6ZscrXzvT2acfXTH3U
+TELEGRAM_TOKEN = "8338861744:AAEhvJfvwqcsVTdKX6ZscrXzvT2acfXTH3U"
 # 2. Get your ID from @userinfobot on Telegram
-USER_ID = 8748661170
+USER_ID = "8748661170"
 
 # Airport ICAO codes to monitor (Polymarket usually uses major US hubs)
 MONITORED_AIRPORTS = [
